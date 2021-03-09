@@ -26,7 +26,7 @@
 Uint32 buffer[BUF_SIZE];
 float filterTaps[9] = {.002385, 0.011910, 0.026352, .038925, .045351, .039825, .026352, .011910, .002385}; // might need different filter values
 Uint32 filter_buffer[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
-OVERDRIVE_VAL = 10; // get this from the i2c interface
+int OVERDRIVE_VAL = 10; // get this from the i2c interface
 
 void echo(DSK6713_AIC23_CodecHandle hCodec);
 void overdrive(DSK6713_AIC23_CodecHandle hCodec);
@@ -96,5 +96,6 @@ void main()
     while(TRUE){
         overdrive(hCodec);
     }
+    DSK6713_AIC23_closeCodec(hCodec);
 
 }
