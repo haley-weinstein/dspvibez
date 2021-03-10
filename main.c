@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-#define BUF_SIZE 200
+#define BUF_SIZE 2048
 #define A 5
 #define B 2
 #define GAIN 10
@@ -46,8 +46,8 @@ void echo(DSK6713_AIC23_CodecHandle hCodec){
     {
         while(!DSK6713_AIC23_read(hCodec, &sample_pair));
         fir_filter(&sample_pair);
+        buffer[i] = sample_pair ;
         sample_pair = A*buffer[i-1]+B*buffer[i-2]+GAIN*sample_pair;
-        buffer[i] = sample_pair ;// how did I forget this before I am actually dense
         while(!DSK6713_AIC23_write(hCodec, sample_pair));
     }
 
@@ -96,6 +96,7 @@ void main()
     while(TRUE){
         overdrive(hCodec);
     }
+
     DSK6713_AIC23_closeCodec(hCodec);
 
 }
