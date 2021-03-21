@@ -91,6 +91,26 @@ void fir_filter(Uint32 *sample_pair)
     *sample_pair = result;
 }
 
+void filter2(hCodec)
+{
+    float h[5];
+    float x[5];
+    int N = 5;
+    Uint32 sample_pair;
+
+    for(i=0; i<5; i++)
+        h[i] = 0;
+    float yn=0;
+    while(!DSK6713_AIC23_read(hCodec, &sample_pair));
+    x[0] = sample_pair;
+    for(i=0; i<N; i++)
+        yn += h[i]*x[i];
+    for(i=(N-1); i>0; i--)
+        x[i] = x[i-1];
+    while(!DSK6713_AIC23_write(hCodec, sample_pair));
+
+}
+
 void overdrive(DSK6713_AIC23_CodecHandle hCodec)
 {
     /*
