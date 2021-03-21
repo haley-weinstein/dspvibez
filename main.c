@@ -18,15 +18,18 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-#define BUF_SIZE 2048
+#define BUF_SIZE 2000
 #define A 5
 #define B 2
-#define GAIN 10
+#define GAIN .6
 
 Uint32 buffer[BUF_SIZE];
 float filterTaps[9] = {.002385, 0.011910, 0.026352, .038925, .045351, .039825, .026352, .011910, .002385}; // might need different filter values
 Uint32 filter_buffer[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 int OVERDRIVE_VAL = 10; // get this from the i2c interface
+
+int i;
+Uint32 intput, output, delayed;
 
 void echo(DSK6713_AIC23_CodecHandle hCodec);
 void overdrive(DSK6713_AIC23_CodecHandle hCodec);
@@ -51,6 +54,23 @@ void echo(DSK6713_AIC23_CodecHandle hCodec){
         while(!DSK6713_AIC23_write(hCodec, sample_pair));
     }
 
+}
+
+
+void echo2(DSK6713_AIC23_CodecHandle hCodec){
+    for(i=0; i<BUF_SIZE; i++) //clear buffer
+            buffer[i] = 0;
+    Uint32 sample_pair = 0;
+    Uint32 output;
+
+    for(i=0; i<BUF_SIZE; i++)
+    {
+        while(!DSK6713_AIC23_read(hCodec, &sample_pair));
+        delayed = buffer[i];
+        output = sample_pair + delayed;
+        buffer[i] = sample_pair + delayed*GAIN;
+        while(!DSK6713_AIC23_write(hCodec, output));
+    }
 }
 
 void fir_filter(Uint32 *sample_pair)
@@ -94,7 +114,7 @@ void main()
     DSK6713_AIC23_setFreq(hCodec, DSK6713_AIC23_FREQ_44KHZ);  //set sampling frequency to 44 kHz
 
     while(TRUE){
-        overdrive(hCodec);
+        echo2(hCodec);
     }
 
     DSK6713_AIC23_closeCodec(hCodec);
