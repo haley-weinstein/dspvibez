@@ -1,5 +1,5 @@
 /*
- * Author: Haley Weinstein
+ * Author: Haley Weinstein, Zachary Stern
  * Date: 02/09/2020
  * Description: Capstone working product [1]
  */
@@ -12,26 +12,33 @@
 #include <csl.h>
 #include <csl_mcbsp.h>
 #include <csl_irq.h>
+#include <csl_i2c.h>
+#include <csl_i2chal.h>
 #include "dsk6713.h"
 #include "dsk6713_led.h"
 #include "dsk6713_aic23.h"
 #include <stdint.h>
 #include <inttypes.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
-#define BUF_SIZE 2000
+
+#define BUF_SIZE 4000
 #define A 5
 #define B 2
-#define GAIN .6
+#define GAIN 1
 
-Uint32 buffer[BUF_SIZE];
+Uint32* buffer;
 float filterTaps[9] = {.002385, 0.011910, 0.026352, .038925, .045351, .039825, .026352, .011910, .002385}; // might need different filter values
 Uint32 filter_buffer[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
-int OVERDRIVE_VAL = 10; // get this from the i2c interface
+Uint32 OVERDRIVE_VAL = 10; // get this from the i2c interface
 
 int i;
-Uint32 intput, output, delayed;
+Uint32 input, output, delayed;
 
 void echo(DSK6713_AIC23_CodecHandle hCodec);
+void echo2(DSK6713_AIC23_CodecHandle hCodec);
 void overdrive(DSK6713_AIC23_CodecHandle hCodec);
 void fir_filter(Uint32 *sample_pair);
 
@@ -58,17 +65,14 @@ void echo(DSK6713_AIC23_CodecHandle hCodec){
 
 
 void echo2(DSK6713_AIC23_CodecHandle hCodec){
-    for(i=0; i<BUF_SIZE; i++) //clear buffer
-            buffer[i] = 0;
     Uint32 sample_pair = 0;
-    Uint32 output;
 
-    for(i=0; i<BUF_SIZE; i++)
+    for(i=1; i<BUF_SIZE; i++)
     {
         while(!DSK6713_AIC23_read(hCodec, &sample_pair));
-        delayed = buffer[i];
+        delayed = buffer[i-1];
         output = sample_pair + delayed;
-        buffer[i] = sample_pair + delayed*GAIN;
+        buffer[i] = sample_pair + delayed;
         while(!DSK6713_AIC23_write(hCodec, output));
     }
 }
@@ -79,6 +83,7 @@ void fir_filter(Uint32 *sample_pair)
      * I definitely fucked up the pointer shit here idk what a pointer is sorry lol
      * the filter math should be gucci tho might need to adjust the taps
      */
+
     int i;
     Uint32 result = *sample_pair;
     for (i = 0; i < 9; i++) { // for each tap
@@ -89,26 +94,6 @@ void fir_filter(Uint32 *sample_pair)
                 filter_buffer[i] = filter_buffer[i-1]; // move everything down the line
     }
     *sample_pair = result;
-}
-
-void filter2(hCodec)
-{
-    float h[5];
-    float x[5];
-    int N = 5;
-    Uint32 sample_pair;
-
-    for(i=0; i<5; i++)
-        h[i] = 0;
-    float yn=0;
-    while(!DSK6713_AIC23_read(hCodec, &sample_pair));
-    x[0] = sample_pair;
-    for(i=0; i<N; i++)
-        yn += h[i]*x[i];
-    for(i=(N-1); i>0; i--)
-        x[i] = x[i-1];
-    while(!DSK6713_AIC23_write(hCodec, sample_pair));
-
 }
 
 void overdrive(DSK6713_AIC23_CodecHandle hCodec)
@@ -127,16 +112,42 @@ void overdrive(DSK6713_AIC23_CodecHandle hCodec)
 void main()
 {
     DSK6713_AIC23_CodecHandle hCodec;
+    I2C_Handle hi2c;
+
+    I2C_Config i2c_config;
+    i2c_config.i2coar = 0x09;                           // set slave address to 9
+    i2c_config.i2cier = 0;
+    i2c_config.i2cclkl = 0xFF;
+    i2c_config.i2cclkh = 0xFF;
+    i2c_config.i2ccnt = 0;
+    i2c_config.i2csar = 0;
+    i2c_config.i2cmdr = 0x2020;                         // configured using doc SPRU175D
+    i2c_config.i2cpsc = 13;                             // not sure about this one, found online
 
     DSK6713_init(); //THIS MUST BE CALLED BEFORE ANYTHING ELSE
 
-    hCodec = DSK6713_AIC23_openCodec(0, &config); //open codec with default configuration
-    DSK6713_AIC23_setFreq(hCodec, DSK6713_AIC23_FREQ_44KHZ);  //set sampling frequency to 44 kHz
+    CSL_init();
+
+    hi2c = I2C_open(I2C_DEV0, 0);
+    I2C_reset(hi2c);                                    // Reset I2C module to configure
+    I2C_config(hi2c,&i2c_config);                        // Configure I2C module using config structure
+    I2C_outOfReset(hi2c);                               // Take module out of reset mode
+    I2C_start(hi2c);
+
+    hCodec = DSK6713_AIC23_openCodec(0, &config);               //open codec with default configuration
+    DSK6713_AIC23_setFreq(hCodec, DSK6713_AIC23_FREQ_8KHZ);    //set sampling frequency to 44 kHz
+
+    int value = 0;
+
+    Uint32* buffer = calloc(4000, sizeof(Uint32));
 
     while(TRUE){
+
+        if (I2C_rrdy(hi2c)) {
+            value = I2C_readByte(hi2c);
+            int j = 0;
+        }
         echo2(hCodec);
     }
-
-    DSK6713_AIC23_closeCodec(hCodec);
 
 }
