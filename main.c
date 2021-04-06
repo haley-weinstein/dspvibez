@@ -41,6 +41,8 @@ void echo(DSK6713_AIC23_CodecHandle hCodec);
 void echo2(DSK6713_AIC23_CodecHandle hCodec);
 void overdrive(DSK6713_AIC23_CodecHandle hCodec);
 void fir_filter(Uint32 *sample_pair);
+Uint32 sample_pair = 0;
+short left;
 
 DSK6713_AIC23_Config config = DSK6713_AIC23_DEFAULTCONFIG;
 
@@ -104,9 +106,18 @@ void overdrive(DSK6713_AIC23_CodecHandle hCodec)
      * Output: Amplified Int32 sample
      */
     Uint32 sample_pair = 0;
+    float left, right;
+    int ileft, iright;
     while(!DSK6713_AIC23_read(hCodec, &sample_pair));
-    sample_pair = sample_pair*OVERDRIVE_VAL;
-    while(!DSK6713_AIC23_write(hCodec, sample_pair));
+    left = ( (int) sample_pair) >> 16;
+    right =( (int) sample_pair) << 16 >> 16;
+    left = left * OVERDRIVE_VAL;
+    ileft = (int) left;
+    iright = (int) right;
+    output = (ileft<<16)|(iright & 0x0000FFFF);
+
+    //output = (left<<16)|(left & 0x0000FFFF);
+    while(!DSK6713_AIC23_write(hCodec, output));
 }
 
 void main()
