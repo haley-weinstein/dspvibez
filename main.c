@@ -28,7 +28,7 @@
 
 #define GAIN 1
 
-Uint32* buffer;
+float* buffer;
 float filterTaps[9] = {.002385, 0.011910, 0.026352, .038925, .045351, .039825, .026352, .011910, .002385}; // might need different filter values
 Uint32 filter_buffer[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 Uint32 OVERDRIVE_VAL = 10; // get this from the i2c interface
@@ -42,9 +42,28 @@ void overdrive(DSK6713_AIC23_CodecHandle hCodec);
 void fir_filter(Uint32 *sample_pair);
 Uint32 sample_pair = 0;
 
-float left, right, prev;
+float left, right, prev, right_out;
 int ileft, iright;
 
+
+int readIndex = 0;
+int writeIndex = BUF_SIZE - 1;
+
+float readNext( float x )
+{
+    float ret = buffer[readIndex];
+    ++readIndex;
+    if( readIndex >= BUF_SIZE )
+        readIndex = 0;
+    return ret;
+}
+
+void writeNext( float x ) {
+    buffer[ writeIndex ] = x;
+    ++writeIndex;
+    if( writeIndex >= BUF_SIZE )
+        writeIndex = 0;
+}
 
 
 DSK6713_AIC23_Config config = DSK6713_AIC23_DEFAULTCONFIG;
@@ -63,15 +82,28 @@ void echo(DSK6713_AIC23_CodecHandle hCodec){
         right =( (int) sample_pair) << 16 >> 16;
         right = .75*buffer[i-1]+.5*buffer[i-2]+1*right;
         buffer[i] = right ;
-
         iright = (int) right;
         output = (iright <<16)|(iright & 0x0000FFFF);
-
         while(!DSK6713_AIC23_write(hCodec, output));
     }
 
 }
 
+float echo3_set( float x, float g ) {
+   float ret = x + g * readNext( x );
+   writeNext( ret );
+   return ret;
+}
+
+void echo3(DSK6713_AIC23_CodecHandle hCodec)
+{
+    while(!DSK6713_AIC23_read(hCodec, &sample_pair));
+    right =( (int) sample_pair) << 16 >> 16;
+    right_out = echo3_set(right, .5);
+    iright = (int) right_out;
+    output = (iright <<16)|(iright & 0x0000FFFF);
+    while(!DSK6713_AIC23_write(hCodec, output));
+}
 
 void echo2(DSK6713_AIC23_CodecHandle hCodec){
 
@@ -168,7 +200,7 @@ void main()
             value = I2C_readByte(hi2c);
             int j = 0;
         }
-        echo2(hCodec);
+        echo3(hCodec);
     }
 
 }
