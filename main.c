@@ -25,8 +25,7 @@
 
 
 #define BUF_SIZE 4000
-#define A 5
-#define B 2
+
 #define GAIN 1
 
 Uint32* buffer;
@@ -42,7 +41,11 @@ void echo2(DSK6713_AIC23_CodecHandle hCodec);
 void overdrive(DSK6713_AIC23_CodecHandle hCodec);
 void fir_filter(Uint32 *sample_pair);
 Uint32 sample_pair = 0;
-short left;
+
+float left, right, prev;
+int ileft, iright;
+
+
 
 DSK6713_AIC23_Config config = DSK6713_AIC23_DEFAULTCONFIG;
 
@@ -50,31 +53,40 @@ void echo(DSK6713_AIC23_CodecHandle hCodec){
     /*
      * Description: simple echo effect
      */
-    buffer[0] = 1;
-    buffer[1] = 2;
+    buffer[0] = 0;
+    buffer[1] = 0;
     int i;
     Uint32 sample_pair = 0;
     for (i=2; i<BUF_SIZE; i++)
     {
         while(!DSK6713_AIC23_read(hCodec, &sample_pair));
-        fir_filter(&sample_pair);
-        buffer[i] = sample_pair ;
-        sample_pair = A*buffer[i-1]+B*buffer[i-2]+GAIN*sample_pair;
-        while(!DSK6713_AIC23_write(hCodec, sample_pair));
+        right =( (int) sample_pair) << 16 >> 16;
+        right = .75*buffer[i-1]+.5*buffer[i-2]+1*right;
+        buffer[i] = right ;
+
+        iright = (int) right;
+        output = (iright <<16)|(iright & 0x0000FFFF);
+
+        while(!DSK6713_AIC23_write(hCodec, output));
     }
 
 }
 
 
 void echo2(DSK6713_AIC23_CodecHandle hCodec){
-    Uint32 sample_pair = 0;
-    Uint32 delayed = 0;
+
 
     for(i=1; i<BUF_SIZE; i++)
     {
         while(!DSK6713_AIC23_read(hCodec, &sample_pair));
-        output = sample_pair + delayed;
-        delayed = output*GAIN;
+        right =( (int) sample_pair) << 16 >> 16;
+
+        right = .9*prev + right;
+        prev = right;
+
+        iright = (int) right;
+        output = (iright <<16)|(iright & 0x0000FFFF);
+
         while(!DSK6713_AIC23_write(hCodec, output));
     }
 }
@@ -105,16 +117,14 @@ void overdrive(DSK6713_AIC23_CodecHandle hCodec)
      * Input: Int32 type sound sample
      * Output: Amplified Int32 sample
      */
-    Uint32 sample_pair = 0;
-    float left, right;
-    int ileft, iright;
+
     while(!DSK6713_AIC23_read(hCodec, &sample_pair));
     left = ( (int) sample_pair) >> 16;
     right =( (int) sample_pair) << 16 >> 16;
     left = left * OVERDRIVE_VAL;
     ileft = (int) left;
     iright = (int) right;
-    output = (ileft<<16)|(iright & 0x0000FFFF);
+    output = (iright <<16)|(iright & 0x0000FFFF);
 
     //output = (left<<16)|(left & 0x0000FFFF);
     while(!DSK6713_AIC23_write(hCodec, output));
