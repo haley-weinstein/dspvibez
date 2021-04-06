@@ -30,7 +30,7 @@
 
 float* buffer;
 float filterTaps[9] = {.002385, 0.011910, 0.026352, .038925, .045351, .039825, .026352, .011910, .002385}; // might need different filter values
-Uint32 filter_buffer[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+float filter_buffer[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 Uint32 OVERDRIVE_VAL = 10; // get this from the i2c interface
 
 int i;
@@ -39,7 +39,7 @@ Uint32 input, output, delayed;
 void echo(DSK6713_AIC23_CodecHandle hCodec);
 void echo2(DSK6713_AIC23_CodecHandle hCodec);
 void overdrive(DSK6713_AIC23_CodecHandle hCodec);
-void fir_filter(Uint32 *sample_pair);
+float fir_filter(float right);
 Uint32 sample_pair = 0;
 
 float left, right, prev, right_out;
@@ -123,7 +123,7 @@ void echo2(DSK6713_AIC23_CodecHandle hCodec){
     }
 }
 
-void fir_filter(Uint32 *sample_pair)
+float fir_filter(float right)
 {
     /* we can repurpose this with different tap vals for the wah effect
      * I definitely fucked up the pointer shit here idk what a pointer is sorry lol
@@ -131,15 +131,25 @@ void fir_filter(Uint32 *sample_pair)
      */
 
     int i;
-    Uint32 result = *sample_pair;
     for (i = 0; i < 9; i++) { // for each tap
-            result = result + filter_buffer[i] * filterTaps[i]; // multiply
+            right = right + filter_buffer[i] * filterTaps[i]; // multiply
             if (i==0)
-                filter_buffer[0] = *sample_pair;
+                filter_buffer[0] = right;
             else
                 filter_buffer[i] = filter_buffer[i-1]; // move everything down the line
     }
-    *sample_pair = result;
+    return right;
+}
+
+void filter(DSK6713_AIC23_CodecHandle hCodec){
+    while(!DSK6713_AIC23_read(hCodec, &sample_pair));
+        right =( (int) sample_pair) << 16 >> 16;
+        right = fir_filter(right);
+        iright = (int) right;
+        output = (iright <<16)|(iright & 0x0000FFFF);
+
+        //output = (left<<16)|(left & 0x0000FFFF);
+        while(!DSK6713_AIC23_write(hCodec, output));
 }
 
 void overdrive(DSK6713_AIC23_CodecHandle hCodec)
