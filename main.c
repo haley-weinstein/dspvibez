@@ -47,11 +47,11 @@ int wah_freq = 2000;
 int sampling_freq = 8000;
 float damp = .05;
 
-int i;
+int i, read1, read2, read3;
 
 Uint32 sample_pair, output;
 
-
+int read_idx = 0;
 
 void main()
 {
@@ -79,11 +79,15 @@ void main()
         {
             while(!DSK6713_AIC23_read(hCodec, &sample_pair));
             right =( (int) sample_pair) << 16 >> 16;
-            right_out = right+.9*buffer[1] + .9*buffer[1000] +.9*buffer[2000]+.9*buffer[3000];
-            buffer[0] = right_out; //try changing this to right if it sounds funky
 
-            for(i=0 ; i<BUF_SIZE; i++){
-                buffer[i+1] = buffer[i]; //move the buffer down
+            read1 = (read_idx + 1000) % BUF_SIZE;
+            read2 = (read_idx + 2000) % BUF_SIZE;
+            read3 = (read_idx + 3000) % BUF_SIZE;
+            right_out = right+.9*buffer[read_idx] + .9*buffer[read1] +.9*buffer[read2]+.9*buffer[read3];
+            buffer[read_idx] = right_out; //try changing this to right if it sounds funky
+            read_idx++;
+            if(read_idx >= BUF_SIZE){
+                read_idx = 0;
             }
 
             iright = (int) right_out;
