@@ -53,7 +53,7 @@ void main()
     DSK6713_AIC23_setFreq(hCodec, DSK6713_AIC23_FREQ_8KHZ);
     bool echo = true;
     bool wahwah = false;
-    double delay_time = .1;
+    double delay_time = .05;
 
     for(i=0; i<BUF_SIZE; i++){
         buffer[i] = 0;
@@ -65,18 +65,21 @@ void main()
             right =( (int) sample_pair) << 16 >> 16;
             delay = sampling_frequency*delay_time;
 
+            delay_line = 0;
+            float gain_factor = 1;
             for(i=0; i<DELAYS; i++)
             {
                 buf_idx = (i+delay) % BUF_SIZE;
-                delay_line += (.9-i*.07)*buffer[buf_idx];
+                delay_line += ((float) pow(.9,i))*buffer[buf_idx];
+                gain_factor += pow(.9,i);
             }
-
+            right_out = (delay_line + right);// / gain_factor;
             buffer[read_idx] = right;
             read_idx++;
             if(read_idx >= BUF_SIZE){
                 read_idx = 0;
             }
-            right_out = delay_line + right;
+
             iright = (int) right_out;
             output = (iright <<16)|(iright & 0x0000FFFF);
             while(!DSK6713_AIC23_write(hCodec, output));
