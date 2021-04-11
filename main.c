@@ -4,19 +4,23 @@
  * Description: Just the echo effect
  */
 #define CHIP_6713
-#define BUF_SIZE 8000
+#define BUF_SIZE 5000
+#define CHUNK_SIZE 200
 
-#include <stdio.h>
-#include <math.h>
+//Add board support libraries
 #include <c6x.h>
 #include <csl.h>
 #include <csl_mcbsp.h>
 #include <csl_irq.h>
 #include <csl_i2c.h>
 #include <csl_i2chal.h>
+
+//Add dsk specific libraries
 #include "dsk6713.h"
 #include "dsk6713_led.h"
 #include "dsk6713_aic23.h"
+
+//add c libraries
 #include <stdint.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -24,49 +28,30 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+//add library haley snagged for the wah
+#include <wahwah.h>
 
 float *buffer;
-float *triangle;
-float right, right_out, ret, peak;
+
+float right, right_out, ret;
 int iright;
 
-int readIndex = 0;
 
 
-int writeIndex = BUF_SIZE - 1;
+
+int writeIndex = 0;
 float damping = .05;
 int minf = 500;
 int maxf = 3000;
 int wah_freq = 2000;
 int sampling_freq = 8000;
-//float delta_f = wah_freq/sampling_freq;
+float damp = .05;
+
+int i;
 
 Uint32 sample_pair, output;
 
-void add_delays(DSK6713_AIC23_CodecHandle hCodec, int del_time1, int del_time2, int del_time3, float gain_1, float gain_2, float gain_3){
-    while(!DSK6713_AIC23_read(hCodec, &sample_pair));
-    right =( (int) sample_pair) << 16 >> 16;
-    right_out = right+.9*buffer[readIndex] + gain_1*buffer[readIndex+del_time1] +gain_2*buffer[readIndex+del_time2]+gain_3*buffer[readIndex+del_time3];
-    ++readIndex;
-    if ((readIndex+del_time3) >= BUF_SIZE)
-        readIndex=0;
-    buffer[writeIndex] = right_out;
-    ++writeIndex;
-    if(writeIndex >= BUF_SIZE)
-        writeIndex = 0;
-    iright = (int) right_out;
-    output = (iright <<16)|(iright & 0x0000FFFF);
-    while(!DSK6713_AIC23_write(hCodec, output));
-}
 
-/*
-void wah(DSK6713_AIC23_CodecHandle hCodec){
-    change_in_freq = wah_freq/sampling_freq;
-    float q1 = 2 *damp;
-    while(!DSK6713_AIC23_read(hCodec, &sample_pair));
-    right =( (int) sample_pair) << 16 >> 16;
-
-}*/
 
 void main()
 {
@@ -77,40 +62,43 @@ void main()
     hCodec = DSK6713_AIC23_openCodec(0, &config);               //open codec with default configuration
     DSK6713_AIC23_setFreq(hCodec, DSK6713_AIC23_FREQ_8KHZ);
     bool echo = true;
-    bool reverb = false; //get these variables from i2c bus
-    bool slapback = false;
-    bool chorus = false;
     bool wahwah = false;
-    //int tot = (maxf - minf)/delta_f;
-    /*
-    float* triangle = calloc(tot, sizeof(float));
-    int i = 0;
-
-    float freq;
-
-    while(freq < max_freq){
-        freq = minf + delta_f;
-        triangle[i] = freq;
-        i = i + 1;
+    for(i=0; i<BUF_SIZE; i++){
+        buffer[i] = 0;
     }
-
-
-    while(sizeof triangle < BUF_SIZE){
-
-    }
-    */
+    AutoWah_init(2000,  /*Effect rate 2000*/
+                 sampling_freq, /*Sampling Frequency*/
+                 1000,  /*Maximum frequency*/
+                 500,   /*Minimum frequency*/
+                 4,     /*Q*/
+                 0.707, /*Gain factor*/
+                 10     /*Frequency increment*/
+                 );
     while(TRUE){
         if (echo)
         {
-            add_delays(hCodec, 1000, 1000, 1000, .9, .7, .5);
+            while(!DSK6713_AIC23_read(hCodec, &sample_pair));
+            right =( (int) sample_pair) << 16 >> 16;
+            right_out = right+.9*buffer[1] + .9*buffer[1000] +.9*buffer[2000]+.9*buffer[3000];
+            buffer[0] = right_out; //try changing this to right if it sounds funky
+
+            for(i=0 ; i<BUF_SIZE; i++){
+                buffer[i+1] = buffer[i]; //move the buffer down
+            }
+
+            iright = (int) right_out;
+            output = (iright <<16)|(iright & 0x0000FFFF);
+            while(!DSK6713_AIC23_write(hCodec, output));
         }
-        if (reverb)
-        {
-            add_delays(hCodec, 50, 50, 50, .9, .7, .5);
-        }
-        if (slapback)
-        {
-            add_delays(hCodec, 10, 10, 10, 1, 1, 1);
+        if (wahwah){
+            while(!DSK6713_AIC23_read(hCodec, &sample_pair));
+            right =( (int) sample_pair) << 16 >> 16;
+            ret = AutoWah_process(right);
+            iright = (int) ret;
+            output = (iright <<16)|(iright & 0x0000FFFF);
+            while(!DSK6713_AIC23_write(hCodec, output));
+            AutoWah_sweep();
+
         }
 
 
