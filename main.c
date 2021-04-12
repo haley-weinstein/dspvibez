@@ -8,7 +8,7 @@
 #define CHUNK_SIZE 200
 #define BP_MAX_COEFS 120
 #define PI 3.1415926
-#define DELAYS 10
+#define DELAYS 4
 
 //Add board support libraries
 #include <c6x.h>
@@ -30,11 +30,13 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <math.h>
 
 
-float buffer[BUF_SIZE];
+Int16 buffer[BUF_SIZE];
+float delay_gains[4] = {.9, .7, .5, .3};
 
-float right, right_out, ret, delay_line;
+Int16 right, right_out, ret, delay_line;
 int iright;
 int i, buf_idx, read_idx;
 int delay;
@@ -65,20 +67,21 @@ void main()
             right =( (int) sample_pair) << 16 >> 16;
             delay = sampling_frequency*delay_time;
 
+            delay_line = 0;
             for(i=0; i<DELAYS; i++)
             {
-                buf_idx = (i+delay) % BUF_SIZE;
-                delay_line += (.9-i*.07)*buffer[buf_idx];
+                buf_idx = (i+delay/DELAYS) % BUF_SIZE;
+                delay_line += (delay_gains[i]*buffer[buf_idx]);
             }
 
+            right_out = (delay_line + right);// / gain_factor;
             buffer[read_idx] = right;
             read_idx++;
             if(read_idx >= BUF_SIZE){
                 read_idx = 0;
             }
-            right_out = delay_line + right;
-            iright = (int) right_out;
-            output = (iright <<16)|(iright & 0x0000FFFF);
+
+            output = (right_out <<16)|(right_out & 0x0000FFFF);
             while(!DSK6713_AIC23_write(hCodec, output));
 
         }
@@ -86,4 +89,3 @@ void main()
 
 
 }
-
